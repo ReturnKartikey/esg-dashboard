@@ -82,8 +82,13 @@ class NormalizedRecordSerializer(serializers.ModelSerializer):
         return data
 
 class AuditLogSerializer(serializers.ModelSerializer):
-    changed_by_username = serializers.CharField(source='changed_by.user.username', read_only=True)
+    changed_by_username = serializers.SerializerMethodField()
     
     class Meta:
         model = AuditLog
         fields = ['id', 'normalized_record', 'action', 'field_name', 'old_value', 'new_value', 'changed_by_username', 'changed_at']
+
+    def get_changed_by_username(self, obj):
+        if obj.changed_by and obj.changed_by.user:
+            return obj.changed_by.user.username
+        return "System"
