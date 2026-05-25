@@ -3,7 +3,7 @@ import {
   UploadCloud, RefreshCw, CheckCircle, XCircle,
   AlertTriangle, User, Edit3, Building2, TrendingUp,
   FileSpreadsheet, ChevronRight, X, Sun, Moon,
-  ChevronDown, Menu
+  ChevronDown, Menu, Leaf, Download
 } from 'lucide-react';
 
 // Interfaces mapping to backend models
@@ -93,6 +93,36 @@ interface DashboardStats {
     scope_3: number;
     overall: number;
   };
+}
+
+function getEmissionFactorInfo(record: NormalizedRecord) {
+  const category = record.category;
+  const activityType = record.activity_type;
+  
+  const qty = parseFloat(record.normalized_quantity);
+  const emissions = parseFloat(record.carbon_emissions_mtco2e);
+  
+  if (category === 'FUEL') {
+    if (activityType === 'DIESEL') return { factor: '2.6800', unit: 'kg CO2e/L', name: 'Diesel (Scope 1)' };
+    if (activityType === 'GASOLINE') return { factor: '2.3100', unit: 'kg CO2e/L', name: 'Gasoline (Scope 1)' };
+    if (activityType === 'NATURAL_GAS') return { factor: '1.8800', unit: 'kg CO2e/m3', name: 'Natural Gas (Scope 1)' };
+  } else if (category === 'ELECTRICITY') {
+    const factor = qty > 0 ? (emissions * 1000) / qty : 0.0;
+    return { factor: factor.toFixed(4), unit: 'kg CO2e/kWh', name: 'Grid Electricity (Scope 2)' };
+  } else if (category === 'FLIGHT') {
+    const baseFactor = activityType === 'FLIGHT_SHORT_HAUL' ? '0.1510' : '0.1850';
+    const label = activityType === 'FLIGHT_SHORT_HAUL' ? 'Short-haul Flight (Scope 3)' : 'Long-haul Flight (Scope 3)';
+    return { factor: baseFactor, unit: 'kg CO2e/pkm', name: label };
+  } else if (category === 'HOTEL') {
+    const factor = qty > 0 ? (emissions * 1000) / qty : 0.0;
+    return { factor: factor.toFixed(1), unit: 'kg CO2e/room_night', name: 'Hotel Night (Scope 3)' };
+  } else if (category === 'GROUND_TRANSPORT') {
+    if (activityType === 'CAR_RENTAL_GASOLINE') return { factor: '0.1710', unit: 'kg CO2e/km', name: 'Car Rental Gasoline (Scope 3)' };
+    if (activityType === 'CAR_RENTAL_ELECTRIC') return { factor: '0.0480', unit: 'kg CO2e/km', name: 'Car Rental Electric (Scope 3)' };
+  }
+  
+  const computedFactor = qty > 0 ? (emissions * 1000) / qty : 0.0;
+  return { factor: computedFactor.toFixed(4), unit: 'kg CO2e/unit', name: activityType || category };
 }
 
 export default function App() {
@@ -513,6 +543,27 @@ export default function App() {
     setFilterMonth('');
   };
 
+  const handleResetDatabase = () => {
+    if (!confirm("Are you sure you want to reset the database? This will delete all uploaded files, recalculated metrics, and approved records, restoring the system to a clean state.")) return;
+
+    fetch('/api/users/reset-database/', {
+      method: 'POST',
+      headers: getHeaders()
+    })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || "Database reset failed.");
+        }
+        alert("Database has been reset successfully.");
+        refreshData();
+      })
+      .catch(err => {
+        alert(`Reset failed: ${err.message}`);
+      });
+  };
+
+
   const handleExportAuditTrail = (record: NormalizedRecord) => {
     if (!record) return;
     
@@ -565,7 +616,9 @@ export default function App() {
       {/* Persistent Side Navigation */}
       <aside className={`sidebar ${isMobileSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <div className="sidebar-brand-icon">B</div>
+          <div className="sidebar-brand-icon">
+            <Leaf size={16} color="#ffffff" />
+          </div>
           <div>
             <h1 className="sidebar-brand-name">Breathe ESG</h1>
             <p className="sidebar-brand-subtitle">Carbon Management</p>
@@ -637,6 +690,16 @@ export default function App() {
           </div>
 
           <div className="topbar-right">
+            {/* Reset Database Button */}
+            <button
+              onClick={handleResetDatabase}
+              className="btn-reset-db"
+              title="Reset Database to initial state"
+            >
+              <RefreshCw size={14} />
+              <span className="reset-btn-text">Reset DB</span>
+            </button>
+
             {/* Theme Toggle Button */}
             <button
               onClick={() => setTheme(prev => (prev === 'light' ? 'dark' : 'light'))}
@@ -1238,7 +1301,9 @@ export default function App() {
           <div className="drawer-header">
             <div>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Emissions Record Lineage</h2>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ID: {selectedRecord?.id}</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} title={selectedRecord?.id}>
+                ID: {selectedRecord?.id ? `${selectedRecord.id.substring(0, 8)}...` : ''}
+              </span>
             </div>
             <button className="drawer-close" onClick={() => setIsDrawerOpen(false)}>
               <X size={20} />
@@ -1312,15 +1377,41 @@ export default function App() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
                     <span style={{ color: 'var(--text-secondary)' }}>Calculation Formula</span>
-                    <span style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                      (Quantity * Factor) / 1000
+                    <span style={{ color: 'var(--text-secondary)', fontFamily: 'monospace', textAlign: 'right' }}>
+                      {selectedRecord.category === 'FLIGHT' ? (
+                        <>
+                          (Qty * Factor * Mult) / 1000
+                          <br />
+                          <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>
+                            ({parseFloat(selectedRecord.normalized_quantity).toLocaleString()} * {getEmissionFactorInfo(selectedRecord).factor} * {parseFloat(selectedRecord.carbon_emissions_mtco2e) > 0 ? (parseFloat(selectedRecord.carbon_emissions_mtco2e) * 1000 / (parseFloat(selectedRecord.normalized_quantity) * parseFloat(getEmissionFactorInfo(selectedRecord).factor))).toFixed(2) : '1.00'}) / 1000 = {parseFloat(selectedRecord.carbon_emissions_mtco2e).toFixed(4)} MT
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          (Qty * Factor) / 1000
+                          <br />
+                          <span style={{ fontSize: '0.75rem', opacity: 0.85 }}>
+                            ({parseFloat(selectedRecord.normalized_quantity).toLocaleString()} * {getEmissionFactorInfo(selectedRecord).factor}) / 1000 = {parseFloat(selectedRecord.carbon_emissions_mtco2e).toFixed(4)} MT
+                          </span>
+                        </>
+                      )}
                     </span>
                   </div>
                   
                   {/* Detailed context math depending on source */}
+                  {selectedRecord.category === 'FUEL' && selectedRecord.raw_data && (
+                    <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', border: '1px solid var(--border-color)' }}>
+                      <p style={{ fontWeight: 600, color: 'var(--color-scope1)' }}>Scope 1 Fuel Calculation Detail:</p>
+                      <p>• Fuel Material: <strong>{selectedRecord.raw_data.MATNR || selectedRecord.activity_type}</strong></p>
+                      <p>• Description: <strong>{selectedRecord.raw_data.MAKTX || 'N/A'}</strong></p>
+                      <p>• Ingested Quantity: <strong>{parseFloat(selectedRecord.raw_quantity).toLocaleString()} {selectedRecord.raw_unit}</strong></p>
+                      <p>• Emission Factor: <strong>{getEmissionFactorInfo(selectedRecord).factor} {getEmissionFactorInfo(selectedRecord).unit} ({getEmissionFactorInfo(selectedRecord).name})</strong></p>
+                    </div>
+                  )}
+
                   {selectedRecord.category === 'FLIGHT' && selectedRecord.raw_data && (
                     <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', border: '1px solid var(--border-color)' }}>
-                      <p style={{ fontWeight: 600, color: 'var(--color-scope2)' }}>Travel Segment Calculation Detail:</p>
+                      <p style={{ fontWeight: 600, color: 'var(--color-scope3)' }}>Travel Segment Calculation Detail:</p>
                       <p>• Flight Path: <strong>{selectedRecord.raw_data['Flight Origin']} ➔ {selectedRecord.raw_data['Flight Destination']}</strong></p>
                       <p>• Calculated Great Circle Distance: <strong>{parseFloat(selectedRecord.raw_quantity).toLocaleString()} km</strong></p>
                       <p>• Cabin Class: <strong>{selectedRecord.raw_data['Cabin Class'] || 'Economy'}</strong></p>
@@ -1330,9 +1421,22 @@ export default function App() {
 
                   {selectedRecord.category === 'HOTEL' && selectedRecord.raw_data && (
                     <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', border: '1px solid var(--border-color)' }}>
-                      <p style={{ fontWeight: 600, color: 'var(--color-scope2)' }}>Hotel Stay Calculation Detail:</p>
+                      <p style={{ fontWeight: 600, color: 'var(--color-scope3)' }}>Hotel Stay Calculation Detail:</p>
                       <p>• Location Assumed: <strong>{selectedRecord.raw_data['Hotel Country'] || 'HQ Base'}</strong></p>
                       <p>• Room Nights: <strong>{selectedRecord.raw_quantity} nights</strong></p>
+                    </div>
+                  )}
+
+                  {selectedRecord.category === 'GROUND_TRANSPORT' && selectedRecord.raw_data && (
+                    <div style={{ background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', border: '1px solid var(--border-color)' }}>
+                      <p style={{ fontWeight: 600, color: 'var(--color-scope3)' }}>Ground Transport Calculation Detail:</p>
+                      <p>• Car Segment Type: <strong>{selectedRecord.raw_data['Car Category'] || (selectedRecord.activity_type === 'CAR_RENTAL_ELECTRIC' ? 'Electric' : 'Gasoline')}</strong></p>
+                      <p>• Rental Duration: <strong>{selectedRecord.raw_data['Rental Days'] ? `${selectedRecord.raw_data['Rental Days']} days` : 'N/A'}</strong></p>
+                      <p>• Distance Traveled: <strong>{parseFloat(selectedRecord.raw_quantity).toLocaleString()} km</strong></p>
+                      {selectedRecord.rejection_reason && selectedRecord.rejection_reason.includes('estimated') && (
+                        <p style={{ color: 'var(--color-warning)', fontWeight: 500 }}>• Warning: Missing distance, estimated 80 km/day based on {selectedRecord.raw_data['Rental Days']} rental days.</p>
+                      )}
+                      <p>• Emission Factor: <strong>{getEmissionFactorInfo(selectedRecord).factor} {getEmissionFactorInfo(selectedRecord).unit}</strong></p>
                     </div>
                   )}
 
@@ -1391,8 +1495,8 @@ export default function App() {
 
           {/* Drawer Actions */}
           {selectedRecord && (
-            <div className="drawer-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <div className="drawer-footer">
+              <div className="drawer-actions-left">
                 {currentUserProfile?.role === 'ANALYST' && selectedRecord.status !== 'APPROVED' && (
                   <>
                     <button className="btn btn-primary" onClick={() => openEditModal(selectedRecord)}>
@@ -1407,13 +1511,13 @@ export default function App() {
                   </>
                 )}
                 {selectedRecord.status === 'APPROVED' && (
-                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}>
+                  <div className="drawer-locked-message">
                     <CheckCircle size={16} color="var(--color-success)" /> Locked for Audit by {selectedRecord.reviewed_by_username} on {selectedRecord.reviewed_at ? new Date(selectedRecord.reviewed_at).toLocaleDateString() : ''}
                   </div>
                 )}
               </div>
-              <button className="btn btn-secondary" onClick={() => handleExportAuditTrail(selectedRecord)} style={{ marginLeft: 'auto' }}>
-                Export Audit Trail
+              <button className="btn btn-secondary btn-export" onClick={() => handleExportAuditTrail(selectedRecord)}>
+                <Download size={14} /> Export Audit Trail
               </button>
             </div>
           )}

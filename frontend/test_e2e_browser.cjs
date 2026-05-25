@@ -36,8 +36,14 @@ const fs = require('fs');
     // Wait for the stats to load (wait for Overview tab elements)
     await page.waitForSelector('.kpi-card');
     console.log("[OK] Dashboard loaded successfully.");
+
+    // Step 1b: Reset database to ensure clean test run
+    console.log("Step 1b: Clicking Reset DB to wipe old test data...");
+    await page.click('.btn-reset-db');
+    await page.waitForTimeout(1500); // wait for reset execution
+    console.log("[OK] Database reset completed.");
     
-    // Take a screenshot of the initial overview
+    // Take a screenshot of the initial overview (now guaranteed to be empty)
     await page.screenshot({ path: path.join(screenshotDir, 'screenshot_1_overview_initial.png') });
     console.log("[OK] Saved screenshot 1 (Initial Overview).");
 

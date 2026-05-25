@@ -35,11 +35,14 @@ def clean_decimal(val):
         return Decimal('0')
     val_str = str(val).strip()
     
-    # Handle German formatting
+    # Handle mixed formatting (comma and dot)
     if ',' in val_str and '.' in val_str:
         if val_str.find('.') < val_str.find(','):
-            # dot is thousands separator, comma is decimal
+            # dot is thousands separator, comma is decimal (German/European)
             val_str = val_str.replace('.', '').replace(',', '.')
+        else:
+            # comma is thousands separator, dot is decimal (US/Standard)
+            val_str = val_str.replace(',', '')
     elif ',' in val_str:
         # If there's only a comma, it could be decimal (German) or thousands (US)
         parts = val_str.split(',')

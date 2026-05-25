@@ -62,6 +62,16 @@ class UserProfileViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = UserProfileSerializer(profile)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['post'], url_path='reset-database')
+    def reset_database(self, request):
+        with transaction.atomic():
+            AuditLog.objects.all().delete()
+            NormalizedRecord.objects.all().delete()
+            RawRecord.objects.all().delete()
+            IngestionJob.objects.all().delete()
+        return Response({"message": "Database reset successfully."})
+
+
 class FacilityViewSet(TenantScopedViewSet):
     queryset = Facility.objects.all()
     serializer_class = FacilitySerializer
