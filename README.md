@@ -1,6 +1,43 @@
 # Breathe ESG Ingestion Engine & Review Ledger
 
-A fully functional Django REST Framework and React (Vite + TS) prototype for ESG data ingestion, proration normalization, and analyst sign-off review.
+A modern, enterprise-grade ESG Carbon Management dashboard prototype built using **Django REST Framework** (Python) and **React (Vite + TypeScript)**. It integrates automated multi-scope ingestion, data proration, inline recalculations, audit lineage validation, and multi-tenant security isolation.
+
+Live Production URL: **[https://esg-dashboard-ap1y.onrender.com](https://esg-dashboard-ap1y.onrender.com)**
+
+---
+
+## ⚡ Key Features
+
+- 📊 **Liquid-Glassmorphic UI**: Premium high-contrast frosted glass panels with hardware-accelerated animations (staggered cards, transitions, and warning pulses) for both Light and Dark modes.
+- 📥 **Automated Multi-Scope Ingestion Engine**:
+  - **SAP Fuel Procurement (Scope 1)**: Filters fuel logs (Diesel, Gasoline, Natural Gas) from general material sheets, with decimal parser support for both German (`1.250,50`) and US (`1,500.00`) formatting.
+  - **Utility Electricity Portals (Scope 2)**: Prorates billing periods across months and automatically alerts users of overlapping cycles.
+  - **Corporate Travel Expenses (Scope 3)**: Calculates flight distances via Great Circle Haversine formulas with business/first multipliers, and estimates car transport using rental days when distance is missing.
+- 🔍 **Calculations & Lineage Verification**:
+  - Slide-over drawer detailing raw uploaded JSON records.
+  - Contextual math lineage cards demonstrating exact values (e.g. `(6,200 * 0.2310) / 1000 = 1.4322 MT`) instead of generic formulas.
+  - Tailored lineage parameters for **Scope 1 Fuel**, **Scope 2 Electricity**, **Scope 3 Flight**, and **Scope 3 Ground Transport**.
+- 🛠️ **Recalculations & Audit Locking**:
+  - Dynamic recalculation on manual quantity changes.
+  - Immutable audit logs showing original vs updated quantities.
+  - Automatic database row-locking once marked as `APPROVED` to prevent modification.
+- 🔒 **Multi-Tenant Security Isolation**: Dynamically filters database views and statistics, separating Acme Corporation and EcoSphere Industries.
+
+---
+
+## 🏗️ Technical Architecture
+
+```mermaid
+graph TD
+    A[CSV Ingestion Feed] -->|POST /api/ingest/| B(Django Ingestion Job)
+    B -->|Mixed Decimal & Date Parsing| C{Category Parser}
+    C -->|Scope 1: Fuel| D[Normalized Record]
+    C -->|Scope 2: Electricity| D
+    C -->|Scope 3: Flight/Car| D
+    D -->|Recalculate & Validate| E[Audit Log Trail]
+    D -->|JSON Serializer| F[React Dashboard Ledger]
+    F -->|Edit & Sign Off / Bulk Lock| D
+```
 
 ---
 
@@ -26,77 +63,78 @@ A fully functional Django REST Framework and React (Vite + TS) prototype for ESG
    ```bash
    pip install -r requirements.txt
    ```
-4. Run migrations and seed the database:
+4. Run migrations and seed database references:
    ```bash
    python manage.py migrate
    python seed_db.py
    ```
-5. Start the Django development server:
+5. Start the development server:
    ```bash
    python manage.py runserver
    ```
-   The backend API will run at `http://127.0.0.1:8000/`.
+   The backend API runs at `http://127.0.0.1:8000/`.
 
-### 2. Frontend Setup (React + Vite + TypeScript)
+### 2. Frontend Setup (React + Vite + TS)
 
 1. Navigate to the frontend directory:
    ```bash
    cd frontend
    ```
-2. Install npm dependencies:
+2. Install npm packages:
    ```bash
    npm install
    ```
-3. Start the Vite development server:
+3. Start the dev server:
    ```bash
    npm run dev
    ```
-   The React frontend will run at `http://localhost:5173/` and is pre-configured to proxy API calls to port 8000.
+   The React frontend runs at `http://localhost:5173/` (proxies `/api` requests to port 8000).
 
 ---
 
-## 🧪 Running Automated Tests
+## 🧪 Testing Suite
 
-Run the backend unit tests to verify carbon calculations (Haversine flight distances), proration logic, CSV parsing, and multi-tenant security separation:
+### 1. Backend Calculations & Calculations Tests
+Runs Django assertions on Haversine distance, proration algorithms, thousands-separator parsing, and security isolation:
 ```bash
 cd backend
-.\venv\Scripts\activate # or source venv/bin/activate
 python manage.py test
+```
+
+### 2. Frontend E2E Playwright Browser Tests
+Performs a fully automated browser simulation (headful local run) uploading feeds, validating recalculation modals, bulk approvals, audit trails, and multi-tenant separation:
+```bash
+cd frontend
+node test_e2e_browser.cjs
+```
+
+### 3. Production Live API Tests
+Runs headless playwright verification targeting the live deployed cloud app:
+```bash
+cd frontend
+node test_production.cjs
 ```
 
 ---
 
-## ☁️ Deploying to the Cloud
+## 👥 Mock Accounts & Roles
 
-Our workspace includes a multi-stage `Dockerfile` in the root directory. This makes cloud deployment simple and cloud-agnostic.
+Use the navbar session dropdown switcher to switch roles and organizations:
 
-### Deploying to Railway (Recommended - Fastest)
-1. Push this Git repository to a private or public GitHub repository.
-2. Go to [Railway](https://railway.app/) and click **New Project** ➔ **Deploy from GitHub repo**.
-3. Select your repository.
-4. Railway will automatically detect the root `Dockerfile` and build it.
-5. In the service settings, click **Generate Domain** to get your public live URL.
-6. The database migrations and seeding script (`seed_db.py`) will automatically execute during the startup phase.
-
-### Deploying to Render
-1. Push this Git repository to GitHub.
-2. Log in to [Render](https://render.com/) and create a new **Web Service**.
-3. Link your GitHub repository.
-4. Select **Docker** as the runtime environment.
-5. In the **Environment Variables** section, add `PORT = 8000` (Render defaults to this, but defining it is a safe fallback).
-6. Click **Deploy Web Service**.
+| Mock Username | Organization (Tenant) | Role | Permissions |
+| :--- | :--- | :--- | :--- |
+| **`acme_analyst`** | Acme Corporation | **Analyst** | Upload feeds, edit quantities, recalculate, and bulk sign-off |
+| **`acme_auditor`** | Acme Corporation | **Auditor** | Read-only access to Acme data, cannot edit or sign off |
+| **`eco_analyst`** | EcoSphere Industries | **Analyst** | Ingest feeds and manage EcoSphere scope metrics |
+| **`eco_auditor`** | EcoSphere Industries | **Auditor** | Read-only access to EcoSphere metrics |
 
 ---
 
-## 👥 Mock Accounts & Multi-Tenancy
+## ☁️ Cloud Deployment Configuration
 
-For review and evaluation convenience, the system is seeded with mock user sessions. Use the dropdown switcher in the navbar header to test data isolation and permissions:
+The repository includes a multi-stage production `Dockerfile` in the root directory, deployed directly to **Render**.
 
-| Mock Username | Password | Organization (Tenant) | Role | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| **`acme_analyst`** | `password123` | Acme Corporation | **Analyst** | Can upload files, edit records, approve/reject |
-| **`acme_auditor`** | `password123` | Acme Corporation | **Auditor** | Read-only access to Acme data, cannot edit/approve |
-| **`eco_analyst`** | `password123` | EcoSphere Industries | **Analyst** | Can upload files, edit records, approve/reject |
-| **`eco_auditor`** | `password123` | EcoSphere Industries | **Auditor** | Read-only access to EcoSphere data |
-
-*Strict Tenant Separation*: When logged in as `acme_analyst`, you will not see any data uploaded by `eco_analyst` because queries are filtered dynamically based on the profile tenant FK.
+### Deployed to Render
+1. Linked to this GitHub repository.
+2. Configured to use the **Docker** runtime environment.
+3. Automatically runs migrations and database seeding scripts (`seed_db.py`) on container startup.
