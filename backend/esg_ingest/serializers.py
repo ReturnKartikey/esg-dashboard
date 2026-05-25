@@ -73,7 +73,7 @@ class NormalizedRecordSerializer(serializers.ModelSerializer):
             'rejection_reason', 'reviewed_by_username', 'reviewed_at', 'raw_data',
             'raw_record_status', 'raw_record_error'
         ]
-        read_only_fields = ['id', 'raw_record', 'scope', 'category', 'normalized_unit', 'carbon_emissions_mtco2e', 'reviewed_by_username', 'reviewed_at']
+        read_only_fields = ['id', 'raw_record', 'scope', 'category', 'normalized_unit', 'carbon_emissions_mtco2e', 'reviewed_by_username', 'reviewed_at', 'status', 'is_edited']
 
     def validate(self, data):
         # Prevent edits to approved records

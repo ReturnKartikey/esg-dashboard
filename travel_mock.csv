@@ -1,0 +1,5 @@
+Booking ID,Date,Type,Flight Origin,Flight Destination,Cabin Class,Hotel Country,Hotel Nights,Car Category,Distance km,Rental Days
+TKT-701,2026-04-15,Flight,SFO,JFK,Business,,,,,
+TKT-702,2026-04-16,Hotel,,,,,GB,3,,,
+TKT-703,2026-04-18,Car,,,,,,,Electric,120.0,
+TKT-704,2026-04-19,Car,,,,,,,Gasoline,,4

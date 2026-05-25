@@ -527,6 +527,9 @@ def run_parser_on_csv(job, file_content_str):
 
     with transaction.atomic():
         for i, row in enumerate(reader, start=1):
+            # Skip completely empty or whitespace rows (common in spreadsheet CSV exports)
+            if not row or not any(str(v).strip() for v in row.values() if v is not None):
+                continue
             try:
                 if source_type == 'SAP_FUEL_PROCUREMENT':
                     parse_sap_row(row, tenant, i, job)

@@ -360,6 +360,7 @@ class NormalizedRecordViewSet(TenantScopedViewSet):
         # To display a timeline chart of emissions by month, we need to divide emissions across their dates.
         # Since this is a prototype, we can build a proration map for all APPROVED records.
         monthly_emissions = {}
+        scope_monthly = {1: {}, 2: {}, 3: {}}
         
         # Pull approved records to prorate
         approved_records = records.filter(status='APPROVED')
@@ -367,6 +368,7 @@ class NormalizedRecordViewSet(TenantScopedViewSet):
             co2 = rec.carbon_emissions_mtco2e
             start = rec.start_date
             end = rec.end_date
+            s_val = rec.scope
             
             days = (end - start).days + 1
             if days <= 0:
@@ -378,6 +380,8 @@ class NormalizedRecordViewSet(TenantScopedViewSet):
             while curr <= end:
                 m_key = curr.strftime('%Y-%m') # e.g. "2026-04"
                 monthly_emissions[m_key] = monthly_emissions.get(m_key, Decimal('0')) + daily_co2
+                if s_val in scope_monthly:
+                    scope_monthly[s_val][m_key] = scope_monthly[s_val].get(m_key, Decimal('0')) + daily_co2
                 curr = datetime.fromordinal(curr.toordinal() + 1).date()
 
         # Format timeline data sorted by month key
@@ -387,6 +391,26 @@ class NormalizedRecordViewSet(TenantScopedViewSet):
                 "month": m_key,
                 "emissions": round(float(monthly_emissions[m_key]), 4)
             })
+
+        # Calculate MoM trends
+        trends = {"scope_1": 0.0, "scope_2": 0.0, "scope_3": 0.0, "overall": 0.0}
+        
+        # Overall trend
+        overall_months = sorted(monthly_emissions.keys())
+        if len(overall_months) >= 2:
+            v_lat = monthly_emissions[overall_months[-1]]
+            v_prv = monthly_emissions[overall_months[-2]]
+            if v_prv > 0:
+                trends["overall"] = round(float(((v_lat - v_prv) / v_prv) * 100), 1)
+
+        # Per-Scope trend
+        for s in [1, 2, 3]:
+            s_months = sorted(scope_monthly[s].keys())
+            if len(s_months) >= 2:
+                v_lat = scope_monthly[s][s_months[-1]]
+                v_prv = scope_monthly[s][s_months[-2]]
+                if v_prv > 0:
+                    trends[f"scope_{s}"] = round(float(((v_lat - v_prv) / v_prv) * 100), 1)
 
         return Response({
             "total_emissions_mtco2e": round(float(total_approved), 2),
@@ -402,7 +426,8 @@ class NormalizedRecordViewSet(TenantScopedViewSet):
                 "scope_2": round(float(scope_breakdown[2]), 2),
                 "scope_3": round(float(scope_breakdown[3]), 2),
             },
-            "timeline": timeline
+            "timeline": timeline,
+            "trends": trends
         })
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
